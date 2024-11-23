@@ -233,3 +233,46 @@ class RolloutStorage:
                        old_actions_log_prob_batch, old_mu_batch, old_sigma_batch, (hid_a_batch, hid_c_batch), masks_batch
                 
                 first_traj = last_traj
+
+class RolloutStorageDAgger(RolloutStorage):
+    class Transition:
+        def __init__(self):
+            self.actions = None
+            self.actions_gt = None
+            self.observations = None
+        
+        def clear(self):
+            self.__init__()
+    
+    def __init__(self, num_envs, num_transitions_per_env, obs_shape, privileged_obs_shape, actions_shape, device='cpu'):
+        super().__init__(num_envs, num_transitions_per_env, obs_shape, privileged_obs_shape, actions_shape, device)
+        self.actions_gt = torch.zeros(num_transitions_per_env, num_envs, *actions_shape, device=self.device)
+
+    def add_transitions(self, transition: Transition):
+        if self.step >= self.num_transitions_per_env:
+            raise AssertionError("Rollout buffer overflow")
+        self.actions[self.step].copy_(transition.actions)
+        self.actions_gt[self.step].copy_(transition.actions_gt)
+        self.observations[self.step].copy_(transition.observations)
+        self.step += 1
+
+    def mini_batch_generator(self, num_mini_batches, num_epochs=8):
+        batch_size = self.num_envs * self.num_transitions_per_env
+        mini_batch_size = batch_size // num_mini_batches
+        indices = torch.randperm(num_mini_batches*mini_batch_size, requires_grad=False, device=self.device)
+
+        actions = self.actions.flatten(0, 1)
+        actions_gt = self.actions_gt.flatten(0, 1)
+        observations = self.observations.flatten(0, 1)
+
+        for epoch in range(num_epochs):
+            for i in range(num_mini_batches):
+
+                start = i*mini_batch_size
+                end = (i+1)*mini_batch_size
+                batch_idx = indices[start:end]
+
+                actions_batch = actions[batch_idx]
+                actions_gt_batch = actions_gt[batch_idx]
+                observations_batch = observations[batch_idx]
+                yield actions_batch, actions_gt_batch, observations_batch

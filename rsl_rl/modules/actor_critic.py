@@ -135,6 +135,23 @@ class ActorCritic(nn.Module):
         value = self.critic(critic_observations)
         return value
 
+class ActorCriticNostd(ActorCritic):
+    def __init__(self, num_actor_obs, num_critic_obs, num_actions, actor_hidden_dims=[256, 256, 256], critic_hidden_dims=[256, 256, 256], activation='elu', init_noise_std=1, **kwargs):
+        super().__init__(num_actor_obs, num_critic_obs, num_actions, actor_hidden_dims, critic_hidden_dims, activation, init_noise_std, **kwargs)
+        self.action = None
+
+    @property
+    def action_mean(self):
+        return self.action
+
+    def update_distribution(self, observations):
+        self.actor.train()
+        self.action = self.actor(observations)
+
+    def act(self, observations, **kwargs):
+        self.update_distribution(observations)
+        return self.action_mean
+
 def get_activation(act_name):
     if act_name == "elu":
         return nn.ELU()
