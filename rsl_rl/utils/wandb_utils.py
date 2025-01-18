@@ -25,7 +25,7 @@ class WandbSummaryWriter(SummaryWriter):
             raise KeyError("Please specify wandb_project in the runner config, e.g. legged_gym.")
 
         try:
-            entity = os.environ["WANDB_USERNAME"]
+            entity = cfg["wandb_entity"]
         except KeyError:
             raise KeyError(
                 "Wandb username not found. Please run or add to ~/.bashrc: export WANDB_USERNAME=YOUR_USERNAME"
@@ -49,7 +49,7 @@ class WandbSummaryWriter(SummaryWriter):
         wandb.config.update({"runner_cfg": runner_cfg})
         wandb.config.update({"policy_cfg": policy_cfg})
         wandb.config.update({"alg_cfg": alg_cfg})
-        wandb.config.update({"env_cfg": asdict(env_cfg)})
+        wandb.config.update({"env_cfg": env_cfg})
 
     def _map_path(self, path):
         if path in self.name_map:

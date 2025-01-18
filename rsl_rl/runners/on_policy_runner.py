@@ -111,9 +111,8 @@ class OnPolicyRunner:
                     actions = self.alg.act(obs, critic_obs)
                     obs, rewards, dones, infos = self.env.step(actions.to(self.env.device))
                     # move to the right device
-                    obs, critic_obs, rewards, dones = (
+                    obs, rewards, dones = (
                         obs.to(self.device),
-                        critic_obs.to(self.device),
                         rewards.to(self.device),
                         dones.to(self.device),
                     )
