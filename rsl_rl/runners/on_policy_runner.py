@@ -9,6 +9,8 @@ import time
 import torch
 from collections import deque
 from torch.utils.tensorboard import SummaryWriter as TensorboardSummaryWriter
+import wandb
+import numpy as np
 
 import rsl_rl
 from rsl_rl.algorithms import PPO
@@ -90,6 +92,7 @@ class OnPolicyRunner:
             self.env.episode_length_buf = torch.randint_like(
                 self.env.episode_length_buf, high=int(self.env.max_episode_length)
             )
+        self.env.reset()
         obs, extras = self.env.get_observations()
         critic_obs = extras["observations"].get("critic", obs)
         obs, critic_obs = obs.to(self.device), critic_obs.to(self.device)
@@ -154,6 +157,10 @@ class OnPolicyRunner:
             self.current_learning_iteration = it
             if self.log_dir is not None:
                 self.log(locals())
+            if self.cfg["record_interval"] > 0 and self.logger_type == "wandb":
+                self.log_video(it)
+                if self.cfg["record_interval"] > 0 and it % self.cfg["record_interval"] == 0:
+                    self.start_recording()
             if it % self.save_interval == 0:
                 self.save(os.path.join(self.log_dir, f"model_{it}.pt"))
             ep_infos.clear()
@@ -199,6 +206,7 @@ class OnPolicyRunner:
         self.writer.add_scalar("Loss/value_function", locs["mean_value_loss"], locs["it"])
         self.writer.add_scalar("Loss/surrogate", locs["mean_surrogate_loss"], locs["it"])
         self.writer.add_scalar("Loss/learning_rate", self.alg.learning_rate, locs["it"])
+        self.writer.add_scalar("Loss/kl", self.alg.kl_mean, locs["it"])
         self.writer.add_scalar("Policy/mean_noise_std", mean_std.item(), locs["it"])
         self.writer.add_scalar("Perf/total_fps", fps, locs["it"])
         self.writer.add_scalar("Perf/collection time", locs["collection_time"], locs["it"])
@@ -304,3 +312,14 @@ class OnPolicyRunner:
 
     def add_git_repo_to_log(self, repo_file_path):
         self.git_status_repos.append(repo_file_path)
+
+    def start_recording(self):
+        self.env.start_recording()
+
+    def log_video(self, it):
+        frames = self.env.get_recorded_frames()
+        if frames is None:
+            return
+        else:
+            video_array = np.concatenate([np.expand_dims(frame, axis=0) for frame in frames ], axis=0).swapaxes(1, 3).swapaxes(2, 3)
+            wandb.log({"video": wandb.Video(video_array, fps=int(1/self.env.dt))}, step=it)
