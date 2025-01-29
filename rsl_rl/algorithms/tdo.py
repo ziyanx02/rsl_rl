@@ -135,8 +135,6 @@ class TDO:
             mu_batch = self.actor_critic.action_mean
             sigma_batch = self.actor_critic.action_std
             entropy_batch = self.actor_critic.entropy
-            states_log_prob_batch = self.temporal_distribution.get_states_log_prob(states_batch, phases_batch)
-            states_entropy_batch = self.temporal_distribution.entropy
 
             # KL
             if self.desired_kl is not None and self.schedule == "adaptive":
@@ -191,6 +189,9 @@ class TDO:
 
             if self.skip_td_update:
                 continue
+
+            states_log_prob_batch = self.temporal_distribution.get_states_log_prob(states_batch, phases_batch)
+            states_entropy_batch = self.temporal_distribution.entropy
 
             # State distribution loss
             state_loss = -states_log_prob_batch.mean()

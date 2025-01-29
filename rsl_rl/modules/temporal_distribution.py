@@ -58,16 +58,10 @@ class TemporalDistribution(nn.Module):
         return self.distribution.sample()
 
     def get_states_log_prob(self, states, times):
+        if len(times.shape) == 2:
+            times = times.squeeze(1)
         self.distribution = Normal(self.mean_params[times], self.std_params[times])
         return self.distribution.log_prob(states).sum(dim=-1)
-
-    def act_inference(self, observations):
-        actions_mean = self.actor(observations)
-        return actions_mean
-
-    def evaluate(self, critic_observations, **kwargs):
-        value = self.critic(critic_observations)
-        return value
 
 
 def get_activation(act_name):

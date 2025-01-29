@@ -51,7 +51,7 @@ class TDORunner:
         temporal_distribution.init_params(env)
 
         alg_class = eval(self.alg_cfg.pop("class_name"))  # TDO
-        self.alg: TDO = alg_class(actor_critic, temporal_distribution, device=self.device, **self.alg_cfg)
+        self.alg: TDO = alg_class(actor_critic, temporal_distribution, skip_td_update=self.env.skip_temporal_distribution, device=self.device, **self.alg_cfg)
 
         self.num_steps_per_env = self.cfg["num_steps_per_env"]
         self.save_interval = self.cfg["save_interval"]
@@ -110,6 +110,7 @@ class TDORunner:
             self.env.time_buf = torch.randint_like(
                 self.env.time_buf, high=int(self.env.period_length)
             )
+        self.env.reset()
         init_state = self.alg.sample(self.env.time_buf)
         self.env.set_state(init_state)
         obs, extras = self.env.get_observations()
@@ -133,6 +134,7 @@ class TDORunner:
                 reset_idx = reset_idx.nonzero(as_tuple=False).flatten()
                 reset_states = self.alg.sample(self.env.time_buf[reset_idx])
                 self.env.set_state(reset_states, reset_idx)
+                self.env.resample_commands(reset_idx)
                 for i in range(self.num_steps_per_env):
                     actions = self.alg.act(obs, critic_obs)
                     obs, rewards, dones, infos = self.env.step(actions.to(self.env.device))
