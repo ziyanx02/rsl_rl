@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from rsl_rl.modules import ActorCritic, TemporalDistribution
-from rsl_rl.storage import RolloutStorage
+from rsl_rl.storage import TDORolloutStorage
 
 
 class TDO:
@@ -31,7 +31,7 @@ class TDO:
         use_clipped_value_loss=True,
         schedule="fixed",
         desired_kl=0.01,
-        skip_td_update=False,
+        is_PPO=False,
         device="cpu",
     ):
         self.device = device
@@ -39,14 +39,14 @@ class TDO:
         self.desired_kl = desired_kl
         self.schedule = schedule
         self.learning_rate = learning_rate
-        self.skip_td_update = skip_td_update
+        self.is_PPO = is_PPO
 
         # PPO components
         self.actor_critic = actor_critic
         self.actor_critic.to(self.device)
         self.storage = None  # initialized later
         self.ac_optimizer = optim.Adam(self.actor_critic.parameters(), lr=learning_rate)
-        self.transition = RolloutStorage.Transition()
+        self.transition = TDORolloutStorage.Transition()
 
         # TDO components
         self.temporal_distribution = temporal_distribution
@@ -65,7 +65,7 @@ class TDO:
         self.use_clipped_value_loss = use_clipped_value_loss
 
     def init_storage(self, num_envs, num_transitions_per_env, actor_obs_shape, critic_obs_shape, action_shape, state_shape):
-        self.storage = RolloutStorage(
+        self.storage = TDORolloutStorage(
             num_envs, num_transitions_per_env, actor_obs_shape, critic_obs_shape, action_shape, state_shape, self.device
         )
 
@@ -115,7 +115,10 @@ class TDO:
     def update(self):
         mean_value_loss = 0
         mean_surrogate_loss = 0
-        generator = self.storage.tdo_mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
+        if self.is_PPO:
+            generator = self.storage.mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
+        else:
+            generator = self.storage.tdo_mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
         for (
             obs_batch,
             critic_obs_batch,
@@ -187,18 +190,23 @@ class TDO:
             mean_value_loss += value_loss.item()
             mean_surrogate_loss += surrogate_loss.item()
 
-            if self.skip_td_update:
+            if self.is_PPO:
                 continue
 
             states_log_prob_batch = self.temporal_distribution.get_states_log_prob(states_batch, phases_batch)
             states_entropy_batch = self.temporal_distribution.entropy
 
-            # State distribution loss
-            state_loss = -states_log_prob_batch.mean()
+            # Transition loss
+            transition_loss = -states_log_prob_batch.mean()
 
             # Return boosting loss
-            returns_batch = returns_batch.reshape(self.temporal_distribution.period_length, -1)
-            phases_batch = phases_batch.reshape(self.temporal_distribution.period_length, -1)
+            returns_batch = returns_batch
+            phases_batch = phases_batch
+
+            # self.td_optimizer.zero_grad()
+            # transition_loss.backward()
+            # nn.utils.clip_grad_norm_(self.temporal_distribution.parameters(), self.max_grad_norm)
+            # self.td_optimizer.step()
 
         num_updates = self.num_learning_epochs * self.num_mini_batches
         mean_value_loss /= num_updates
