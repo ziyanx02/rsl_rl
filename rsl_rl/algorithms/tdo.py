@@ -149,18 +149,18 @@ class TDO:
             entropy_batch = self.actor_critic.entropy
 
             # KL
-            if self.desired_kl is not None and self.schedule == "adaptive":
-                with torch.inference_mode():
-                    kl = torch.sum(
-                        torch.log(sigma_batch / old_sigma_batch + 1.0e-5)
-                        + (torch.square(old_sigma_batch) + torch.square(old_mu_batch - mu_batch))
-                        / (2.0 * torch.square(sigma_batch))
-                        - 0.5,
-                        axis=-1,
-                    )
-                    kl_mean = torch.mean(kl)
-                    self.kl_mean = kl_mean
+            with torch.inference_mode():
+                kl = torch.sum(
+                    torch.log(sigma_batch / old_sigma_batch + 1.0e-5)
+                    + (torch.square(old_sigma_batch) + torch.square(old_mu_batch - mu_batch))
+                    / (2.0 * torch.square(sigma_batch))
+                    - 0.5,
+                    axis=-1,
+                )
+                kl_mean = torch.mean(kl)
+                self.kl_mean = kl_mean
 
+                if self.desired_kl is not None and self.schedule == "adaptive":
                     if kl_mean > self.desired_kl * 2.0:
                         self.learning_rate = max(1e-5, self.learning_rate / 1.5)
                     elif kl_mean < self.desired_kl / 2.0 and kl_mean > 0.0:
@@ -199,26 +199,26 @@ class TDO:
             mean_value_loss += value_loss.item()
             mean_surrogate_loss += surrogate_loss.item()
 
-            if self.is_PPO:
-                continue
+            # if self.is_PPO:
+            #     continue
 
-            states_log_prob_batch = self.temporal_distribution.get_states_log_prob(states_batch, phases_batch)
-            states_entropy_batch = self.temporal_distribution.entropy
+            # states_log_prob_batch = self.temporal_distribution.get_states_log_prob(states_batch, phases_batch)
+            # states_entropy_batch = self.temporal_distribution.entropy
 
-            # Transition loss
-            transition_loss = -states_log_prob_batch.mean()
+            # # Transition loss
+            # transition_loss = -states_log_prob_batch.mean()
 
-            # Return boosting loss
-            ratio = (returns_batch - value_mean_by_time[phases_batch]) / value_std_by_time[phases_batch]
-            return_boosting_loss = (ratio * states_log_prob_batch).mean()
+            # # Return boosting loss
+            # ratio = (returns_batch - value_mean_by_time[phases_batch]) / value_std_by_time[phases_batch]
+            # return_boosting_loss = (ratio * states_log_prob_batch).mean()
 
-            loss = transition_loss + self.return_boosting_coef * return_boosting_loss + self.td_entropy_coef * states_entropy_batch.mean()
+            # loss = transition_loss + self.return_boosting_coef * return_boosting_loss + self.td_entropy_coef * states_entropy_batch.mean()
 
-            self.td_optimizer.zero_grad()
-            if sigma_batch.mean().item() < self.action_noise_threshold:
-                transition_loss.backward()
-                nn.utils.clip_grad_norm_(self.temporal_distribution.parameters(), self.max_grad_norm)
-                self.td_optimizer.step()
+            # self.td_optimizer.zero_grad()
+            # if sigma_batch.mean().item() < self.action_noise_threshold:
+            #     transition_loss.backward()
+            #     nn.utils.clip_grad_norm_(self.temporal_distribution.parameters(), self.max_grad_norm)
+            #     self.td_optimizer.step()
 
         num_updates = self.num_learning_epochs * self.num_mini_batches
         mean_value_loss /= num_updates
